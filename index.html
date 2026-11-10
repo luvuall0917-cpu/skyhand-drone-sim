@@ -350,7 +350,11 @@ body.inflight #hud2{opacity:.74}
         <li><b>좌 / 우로 기울이기</b>그쪽으로 뱅크(선회)</li>
         <li><b>손 높이</b>상승 / 하강 (추력)</li>
         <li><b>다른 손 등장</b>그 손 높이가 추력 레버 (나타난 높이 = 호버)</li>
-        <li><b>손목 비틀기</b>기수 회전 · <b>주먹</b> 액션</li>
+        <li><b>손목 비틀기</b>기수 회전</li>
+        <li><b>주먹 쥐기</b>선속 유지 (코스트) — 선회 가속 후 속도 고정</li>
+        <li><b>엄지+검지 집기</b>표적 식별/캡처 · <b>손 빠르게 내림</b>급강하</li>
+        <li><b>세게 숙이기/젖히기</b>급가속 / 급감속</li>
+        <li><b>이륙</b>지면에서 손을 들면 수직 상승 (전후 자동 보정)</li>
         <li><b>키보드</b>W/S · A/D · 방향키 · Space · G 속도단수 · V 카메라</li>
       </ul>
       <p class="hint" style="margin-top:6px">뱅크 방향이 반대로 느껴지면 튜닝(T) → 뱅크 방향 '반전'.</p>
@@ -512,9 +516,9 @@ function onResults(res){
       HT.stick.roll=shapeAxis(bs*wrap(fr-N.roll)/(CFG.bankMax*DK*DEG));
       HT.stick.yaw=CFG.yawOn==='on'?yawAxis(wrap(fw-N.yaw)/(ym*DK),HT.stick.pitch,HT.stick.roll):0;
     }
-    if(HT.shape==='fist'){HT.stick.pitch=HT.stick.roll=HT.stick.yaw=0;
+    if(HT.shape==='fist'){HT.stick.pitch=HT.stick.roll=HT.stick.yaw=0;G.hold=true;
       if(!HT.fistT)HT.fistT=now; if(!HT.fired&&now-HT.fistT>350){HT.fired=true;doAction();}
-    }else{HT.fistT=0;HT.fired=false;}
+    }else{HT.fistT=0;HT.fired=false;G.hold=false;}
     // 집기(엄지+검지): 표적 식별/캡처
     if(HT.shape==='pinch'){if(!HT.pinchT)HT.pinchT=now; if(!HT.pinchFired&&now-HT.pinchT>160){HT.pinchFired=true;doCapture();}}else{HT.pinchT=0;HT.pinchFired=false;}
     // 손을 빠르게 내림 → 급강하 (추력 유지)
@@ -524,7 +528,7 @@ function onResults(res){
     drawHandOverlay(p,px,pyPrim,now);
     if(sec){const sp=sec.lm.map(q=>({x:1-q.x,y:q.y}));drawSecHand(sp,now);}
   }else{
-    for(const k in HT.f)HT.f[k].reset();HT.shape='-';HT.fistT=0;HT.fired=false;HT.secN=null;HT.secOn=false;
+    for(const k in HT.f)HT.f[k].reset();HT.shape='-';HT.fistT=0;HT.fired=false;HT.secN=null;HT.secOn=false;G.hold=false;
   }
   drawThrottleGuide(prim?HT.pose.y:null);
   }
@@ -574,7 +578,7 @@ function twoHand(lms,wls,aspect,now){
     HT.stick.roll=shapeAxis(wrap(fb-N.roll)/(CFG.bankMax*DEG));
     const latNorm=(fx-N.ax)/(CFG.yawPos/100);
     HT.stick.yaw=CFG.yawOn==='on'?yawAxis(latNorm,HT.stick.pitch,HT.stick.roll):0;
-    if(HT.shape==='fist'){HT.stick.pitch=HT.stick.roll=HT.stick.yaw=0;if(!HT.fistT)HT.fistT=now;if(!HT.fired&&now-HT.fistT>350){HT.fired=true;doAction();}}else{HT.fistT=0;HT.fired=false;}
+    if(HT.shape==='fist'){HT.stick.pitch=HT.stick.roll=HT.stick.yaw=0;G.hold=true;if(!HT.fistT)HT.fistT=now;if(!HT.fired&&now-HT.fistT>350){HT.fired=true;doAction();}}else{HT.fistT=0;HT.fired=false;G.hold=false;}
     drawTwoOverlay(L,R,now);
   }else if(hands.length===1){
     const h=hands[0];const fy=HT.f.y.filter(h.c.y,now,minCut,beta*.8),fp=HT.f.p.filter(h.pitch,now,minCut,beta*.2);
@@ -1224,7 +1228,7 @@ buildTraining();
 
 /* ============================ 비행 모델 ============================ */
 const GEARS=[{n:'1단',spd:1.9,kmh:60,tilt:22},{n:'2단',spd:2.9,kmh:130,tilt:30},{n:'3단',spd:4.1,kmh:250,tilt:38}];
-const G={mode:'train',dead:false,ended:false,shake:0,spd:1,launch:0,gear:0};
+const G={mode:'train',dead:false,ended:false,shake:0,spd:1,launch:0,gear:0,hold:false};
 const S={pos:new V3(0,.2,0),vel:new V3(),yaw:0,pitch:0,roll:0,onGround:true,thrust:0};
 let ringIdx=0,ringCount=0;
 function resetDrone(){S.pos.copy(MAP.start);S.vel.set(0,0,0);S.yaw=MAP.startYaw;S.pitch=S.roll=0;HT.thrHold=0;G.dead=false;drone.visible=true;ringIdx=0;ringCount=0;MAP.rings.forEach(r=>r.prev=r.c.clone().sub(S.pos).dot(r.n));highlightRings();}
@@ -1238,6 +1242,8 @@ function step(inp,dt){
   const fwd=new V3(-Math.sin(S.yaw),0,-Math.cos(S.yaw)),right=new V3(Math.cos(S.yaw),0,-Math.sin(S.yaw));
   const thrUp=CFG.thrMode==='hold'?inp.thr>0.02:inp.thr>-0.6;
   const parked=S.onGround&&!thrUp;
+  // 수직 이륙 보정: 지면 근처에서 상승 입력이 강하면 전후(피치) 영향 축소 → 손바닥이 뒤로 젖혀져도 똑바로 상승
+  if(S.pos.y<9 && inp.thr>0.3){ inp.pitch*=clamp(1-(inp.thr-0.3)*1.15,0.18,1); }
   const tp=parked?0:inp.pitch*maxTilt,tr=parked?0:inp.roll*(CFG.bankAngleMax||62)*DEG;
   const k=1-Math.exp(-dt*7);S.pitch+=(tp-S.pitch)*k;S.roll+=(tr-S.roll)*k;
   if(!parked){
@@ -1246,10 +1252,12 @@ function step(inp,dt){
     const spF=0.45+Math.min(1.9,sp0/17);
     const bankTurn=(CFG.gForce==='on')?(S.roll/DEG)*(CFG.bankTurn/32)*spF:0;
     S.yaw-=(inp.yaw*CFG.yawrate+bankTurn)*DEG*dt;
-    const acc=fwd.clone().multiplyScalar(g*Math.tan(S.pitch)).addScaledVector(right,g*Math.tan(S.roll)).multiplyScalar(GE.spd);
+    const pitchBoost=1+Math.max(0,Math.abs(inp.pitch)-0.55)*2.6; // 세게 숙이면 급가속, 뒤로 세게 젖히면 급감속
+    const fA=g*Math.tan(S.pitch)*pitchBoost, rA=g*Math.tan(S.roll);
+    const acc=fwd.clone().multiplyScalar(fA).addScaledVector(right,rA).multiplyScalar(GE.spd);
     S.vel.x+=acc.x*dt;S.vel.z+=acc.z*dt;
   }
-  const drag=Math.exp(-dt*.45);S.vel.x*=drag;S.vel.z*=drag;
+  const drag=Math.exp(-dt*(G.hold?0.03:0.45));S.vel.x*=drag;S.vel.z*=drag; // 주먹 쥐면 선속 유지(관성 코스트)
   {const sp=Math.hypot(S.vel.x,S.vel.z),cap=GE.kmh/3.6;if(sp>cap){const f=cap/sp;S.vel.x*=f;S.vel.z*=f;}}
   if(CFG.thrMode==='hold'){
     const target=inp.thr*(inp.thr>0?6:5);
@@ -1385,7 +1393,7 @@ function syncSoundButton(){const b=$('#bSound');if(!b)return;b.textContent=DS.en
 function toggleDroneSound(){DS.enabled=!DS.enabled;localStorage.setItem('skyhand_sound',DS.enabled?'on':'off');if(DS.enabled)initDroneSound();syncSoundButton();toast(DS.enabled?'드론 사운드 켜짐':'드론 사운드 꺼짐');}
 function updateDroneSound(){if(!DS.ready)return;const a=AC,n=a.currentTime,airborne=started&&!G.ended;const power=clamp(.22+S.thrust*.78,0,1);DS.master.gain.setTargetAtTime(DS.enabled&&airborne?.085*power:0,n,.12);DS.motor.frequency.setTargetAtTime(68+power*150,n,.06);DS.motor2.frequency.setTargetAtTime(136+power*300,n,.06);DS.noise.frequency.setTargetAtTime(430+power*1200,n,.1);DS.rotorGain.gain.setTargetAtTime(DS.enabled&&G.launch>0?.028:0,n,.12);DS.rotor.frequency.setTargetAtTime(10+power*7,n,.1);}
 function beep(f,d){try{const a=audioContext(),o=a.createOscillator(),g=a.createGain();o.frequency.value=f;g.gain.setValueAtTime(.12,a.currentTime);g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d);o.connect(g).connect(a.destination);o.start();o.stop(a.currentTime+d+.02);}catch(e){}}
-function doAction(){ if(G.mode==='sar'&&started&&!G.ended&&G.launch<=0){missionAction();return;} beep(220,.12);toast('주먹 인식 — 탐색구조에서 구호품 투하에 사용'); }
+function doAction(){ if(G.mode==='sar'&&started&&!G.ended&&G.launch<=0){missionAction();return;} }
 function doCapture(){ beep(1300,.05);setTimeout(()=>beep(1700,.05),60);flash();
   if(G.mode==='sar'&&SAR.on&&!SAR.ended){ const c=SAR.nearId; if(c){toast('표적 포착 — 아군/민간인/미상 분류(1·2·3)');} else {let best=null,bd=90;SAR.survivors.forEach(s=>{if(s.rescued)return;const d=Math.hypot(S.pos.x-s.x,S.pos.z-s.z);if(d<bd){bd=d;best=s;}});
     if(best){best.revealed=true;if(!best.smoke){best.smoke=smokeCol(best.x,best.z,0xff8844);MAP.group.add(best.smoke);}toast('조난자 포착 — 상공 호버로 구조');}else toast('표적 캡처');} }
@@ -1661,7 +1669,7 @@ function missionAction(){
     if(d<11&&S.pos.y<22){SAR.supply.done=true;SAR.supplied=true;SAR.carry=false;SAR.supply.ring.material.color.set(0x8CFF6E);
       dropCrate(S.pos.clone());toast('구호품 투하 성공!');beep(900,.1);setTimeout(()=>beep(1300,.12),110);return;}
     else{toast('투하 지점 상공 20m 이하에서 투하하세요');return;}}
-  toast('지금은 사용할 수 없어요');
+  
 }
 function dropCrate(from){const crate=new THREE.Mesh(new THREE.BoxGeometry(.6,.5,.6),M(0xb5892f));crate.castShadow=true;scene.add(crate);
   FX.push({type:'crate',mesh:crate,pos:from,vy:0,tx:SAR.supply.x,tz:SAR.supply.z,done:false,chute:null});}
